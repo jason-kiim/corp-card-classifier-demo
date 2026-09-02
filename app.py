@@ -20,12 +20,23 @@ Streamlit UI. 사용 흐름은 프로젝트 기획서 STEP 7 그대로입니다.
 """
 
 import io
+import os
 import pandas as pd
 import streamlit as st
 
 import config
 import classifier
 import historical_cases as hc
+
+# Streamlit Community Cloud에서는 API 키를 os.environ이 아니라 st.secrets로 관리합니다.
+# (Settings > Secrets에 ANTHROPIC_API_KEY = "sk-ant-..." 형태로 저장)
+# ai_classifier.py는 os.environ만 확인하므로, 여기서 secrets 값을 환경변수로 옮겨줍니다.
+# 로컬 컴퓨터에서 실행할 때는 st.secrets에 아무것도 없으므로 이 부분은 그냥 조용히 넘어갑니다.
+try:
+    if "ANTHROPIC_API_KEY" in st.secrets:
+        os.environ["ANTHROPIC_API_KEY"] = st.secrets["ANTHROPIC_API_KEY"]
+except Exception:
+    pass
 
 st.set_page_config(page_title="법인카드 비용분류 지원 시스템", layout="wide")
 
@@ -36,7 +47,6 @@ st.caption(
 )
 
 if not st.session_state.get("_ai_key_warned"):
-    import os
     if not os.environ.get("ANTHROPIC_API_KEY"):
         st.warning(
             "ANTHROPIC_API_KEY가 설정되어 있지 않아 AI 판단이 필요한 거래는 "
@@ -79,7 +89,8 @@ if st.button("분석 시작", type="primary"):
         result = classifier.classify_transaction(txn, historical_df=historical_df)
         results.append({
             "AI추천계정": result.account,
-            "AI신뢰도": result.confidence,
+            # 화면 표시용으로 0~100 사이 값으로 저장 (result.confidence는 0.0~1.0 사이 값)
+            "AI신뢰도": round(result.confidence * 100, 1),
             "AI판단근거": result.reason,
             "검토필요여부": "검토" if result.needs_human_review else "자동",
             "판단출처": result.source,
@@ -122,7 +133,7 @@ if "result_df" in st.session_state:
                 "최종확정계정", options=config.ACCOUNTS, required=True,
             ),
             "AI신뢰도": st.column_config.ProgressColumn(
-                "AI신뢰도", min_value=0.0, max_value=1.0, format="%.0f%%",
+                "AI신뢰도", min_value=0, max_value=100, format="%.0f%%",
             ),
         },
         disabled=[c for c in display_cols if c != "최종확정계정"],
