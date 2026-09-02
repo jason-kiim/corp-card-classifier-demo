@@ -38,6 +38,26 @@ try:
 except Exception:
     pass
 
+def confidence_badge(pct: float) -> str:
+    """
+    신뢰도(0~100)를 색깔 있는 동그라미 이모지 + 퍼센트 문자열로 바꿉니다.
+    (Streamlit의 편집 가능한 표(data_editor)는 셀 배경색을 직접 칠하는 기능을 지원하지 않아서,
+     이모지로 초록/노랑/빨강을 표현하는 방식을 대신 사용합니다.)
+    100%에 가까울수록 초록, 0%에 가까울수록 빨강이 되도록 3단계로 나눴습니다.
+    """
+    if pct >= 80:
+        emoji = "🟢"
+    elif pct >= 50:
+        emoji = "🟡"
+    else:
+        emoji = "🔴"
+    return f"{emoji} {pct:.0f}%"
+
+
+def review_badge(status: str) -> str:
+    return "🔴 검토" if status == "검토" else "🟢 자동"
+
+
 st.set_page_config(page_title="법인카드 비용분류 지원 시스템", layout="wide")
 
 st.title("법인카드 비용분류 업무지원 시스템 (V1)")
@@ -126,14 +146,18 @@ if "result_df" in st.session_state:
                                  "AI추천계정", "AI신뢰도", "AI판단근거",
                                  "검토필요여부", "최종확정계정"] if c in result_df.columns]
 
+    # 화면에만 보여줄 표시용 표를 따로 만듭니다.
+    # (result_df 원본은 숫자/원문 그대로 유지해야 최종 Excel 다운로드에 깨끗하게 나갑니다.
+    #  이모지는 화면 표시용일 뿐, 다운로드 파일에는 안 들어갑니다.)
+    display_df = result_df[display_cols].copy()
+    display_df["AI신뢰도"] = display_df["AI신뢰도"].apply(confidence_badge)
+    display_df["검토필요여부"] = display_df["검토필요여부"].apply(review_badge)
+
     edited_df = st.data_editor(
-        result_df[display_cols],
+        display_df,
         column_config={
             "최종확정계정": st.column_config.SelectboxColumn(
                 "최종확정계정", options=config.ACCOUNTS, required=True,
-            ),
-            "AI신뢰도": st.column_config.ProgressColumn(
-                "AI신뢰도", min_value=0, max_value=100, format="%.0f%%",
             ),
         },
         disabled=[c for c in display_cols if c != "최종확정계정"],
